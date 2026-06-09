@@ -1,0 +1,6 @@
+zio-prism
+
+Licensed under the Apache License, Version 2.0. See the LICENSE file for details.
+
+This is a clean-room reimplementation, on ZIO Streams, of the prism streaming-rewrite
+engine. The original concept (jetty-prism) is credited to Greg Wilkins.

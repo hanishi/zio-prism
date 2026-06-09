@@ -1,0 +1,14 @@
+target/
+.bsp/
+.idea/
+.metals/
+.bloop/
+project/project/
+project/target/
+*.class
+.DS_Store
+*.iml
+.idea/
+
+# Example run artifacts (StreamForeverApp / SampleApp output)
+*.out
