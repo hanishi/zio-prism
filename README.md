@@ -37,6 +37,49 @@ strings inside JavaScript), in production until the site shipped native localiza
 recalled and rebuilt from scratch. It shares none of the original code; it was rebuilt from
 the concept.
 
+## Why stream the rewrite?
+
+The original use was localization. The use that brings people here now is **first-party
+proxying** — the same problem wearing a different hat.
+
+Browsers stopped trusting third parties. Safari's **Intelligent Tracking Prevention** (ITP)
+blocks third-party cookies outright; Firefox and Chrome ship comparable restrictions. So a
+measurement or ad vendor that used to set a cookie on its own domain — `tracker.example.com`,
+*third-party* to the site you're on — can no longer read it, and the hit goes unattributed.
+The industry's answer (server-side tagging, CNAME cloaking, first-party collectors) is to send
+the beacon to a domain the **publisher** controls, which forwards it server-side, where ITP has
+no say.
+
+But the URLs in the payload still point at the third-party host, so somewhere between the origin
+and the client they have to be **rewritten in flight**. A video ad is a **VAST** document whose
+tracking URLs sit inside `<![CDATA[…]]>`:
+
+```
+<Impression><![CDATA[https://tracker.example.com/imp?cb=1]]></Impression>
+                              |  Rewrite.wrappingUrls, as it streams
+                              v
+<Impression><![CDATA[https://fp.publisher.com/collect?dest=https%3A%2F%2Ftracker.example.com%2Fimp%3Fcb%3D1]]></Impression>
+```
+
+`Rewrite.wrappingUrls(anchor, template)` captures each matching URL, URL-encodes it into your
+first-party collector URL, and emits it; the collector unwraps `dest=` and forwards the hit
+server-side (see the `UrlWrapApp` example).
+
+You *could* buffer the whole response and rewrite it at the end. You shouldn't — and for some
+inputs you can't:
+
+|                      | buffer-and-rewrite                          | stream the rewrite                          |
+| -------------------- | ------------------------------------------- | ------------------------------------------- |
+| time to first byte   | after the **last** byte arrives, + rewrite  | ~immediate; receive and send overlap        |
+| memory per request   | O(body) — whole body resident               | O(longest pattern) — a few bytes of carry   |
+| at concurrency       | body × in-flight requests                   | a carry × in-flight requests                |
+| unbounded input (live manifests, SSE) | impossible — there is no "end" to buffer | the only option that runs at all   |
+
+The matching work is the same either way — one pass over the bytes. What buffering adds is the
+entire transfer time onto first-byte latency and the entire body into memory, per request — a
+gap that is invisible in a demo and fatal in production. Streaming the rewrite isn't an
+optimization here; it's the design.
+
 ## Engine
 
 `Rewriter` is the framework-agnostic carry contract:
@@ -106,18 +149,27 @@ overlapping rules, reorder or restructure them.
 
 ## Examples
 
-Two runnable samples live in the `examples` module (kept out of the published jar). Both pull
-a document over HTTP and rewrite it as it streams, using only the JDK `HttpClient`, with no
-extra dependencies.
+Runnable samples live in the `examples` module (kept out of the published jar):
 
 ```
 sbt "examples/runMain prism.SampleApp"                       # one-shot: a ~6.5 MB document
+sbt "examples/runMain prism.WordRewriteApp"                  # whole-word vs substring, over real prose
+sbt "examples/runMain prism.UrlWrapApp"                      # first-party URL wrapping in a VAST doc
 sbt "examples/runMain prism.StreamForeverApp"               # endless: a live, unbounded feed
 sbt "examples/runMain prism.StreamForeverApp /tmp/feed.out" # ...tee the rewritten bytes to a file
 ```
 
 `SampleApp` fetches a large text file, rewrites it (British → American spelling), and reports
 size, throughput, and a before/after line.
+
+`WordRewriteApp` streams the same large file through `Rewrite.word` (whole-word replace) and
+prints the contrast with `Rewrite.literal`: `art -> craft` rewrites the word "art" but never
+"start"/"part"/"smart", where substring replace mangles them all.
+
+`UrlWrapApp` is the first-party-proxying use case made concrete: it feeds a VAST ad document
+through `Rewrite.wrappingUrls` in deliberately tiny chunks, so every tracker URL straddles a
+chunk boundary, and shows each one captured whole and re-pointed at a first-party collector
+while a media URL on another host passes through untouched.
 
 `StreamForeverApp` is the point of a streaming engine made visible: it rewrites the
 **Wikimedia EventStreams** feed (a public, never-ending Server-Sent Events stream of every
