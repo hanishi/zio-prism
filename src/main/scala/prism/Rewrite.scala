@@ -51,6 +51,14 @@ object Rewrite {
   def wrappingUrls(anchor: String, template: String): Rewriter =
     TokenRewriter.wrappingUrls(anchor, template)
 
+  /**
+   * Rewrite `from` to `to` inside URL-bearing HTML attribute values only (`href`, `src`, …),
+   * leaving tag/attribute structure intact. Matches anchor names case-insensitively and decodes
+   * HTML entities in the value. See [[UrlAttributeRewriter.replacingHost]].
+   */
+  def replacingHost(from: String, to: String): Rewriter =
+    UrlAttributeRewriter.replacingHost(from, to)
+
   /** True if no pattern is a substring of another (the condition under which Wu-Manber's
    *  selection is identical to Aho-Corasick's). */
   private[prism] def independent(ps: List[String]): Boolean =
