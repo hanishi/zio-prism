@@ -156,6 +156,7 @@ sbt "examples/runMain prism.SampleApp"                       # one-shot: a ~6.5 
 sbt "examples/runMain prism.WordRewriteApp"                  # whole-word vs substring, over real prose
 sbt "examples/runMain prism.UrlWrapApp"                      # first-party URL wrapping in a VAST doc
 sbt "examples/runMain prism.HtmlTextApp"                     # text-only rewrite: skip tags/scripts/styles
+sbt "examples/runMain prism.HostRewriteApp"                  # rewrite a host in href/src values only
 sbt "examples/runMain prism.StreamForeverApp"               # endless: a live, unbounded feed
 sbt "examples/runMain prism.StreamForeverApp /tmp/feed.out" # ...tee the rewritten bytes to a file
 ```
@@ -176,6 +177,11 @@ while a media URL on another host passes through untouched.
 tokenizer applies the inner rewriter to *visible text only*, so an aggressive whole-word rule
 rewrites the body text while `<head>`, `class="header"`, comments, and `<script>`/`<style>`
 bodies are left untouched — fed in 5-byte chunks to prove tags and text runs survive splitting.
+
+`HostRewriteApp` is the mirror image: `Rewrite.replacingHost` re-points a host *only inside
+`href`/`src` attribute values* (decoding `&amp;` so the host still matches in a query string),
+contrasted with a plain `Rewrite.literal` swap that rewrites the host everywhere — in prose and
+inside `<script>` — to show why attribute-scoped rewriting is the right tool for a proxy.
 
 `StreamForeverApp` is the point of a streaming engine made visible: it rewrites the
 **Wikimedia EventStreams** feed (a public, never-ending Server-Sent Events stream of every
