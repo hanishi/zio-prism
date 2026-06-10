@@ -32,6 +32,25 @@ object Rewrite {
     else new LiteralRewriter(rules)
   }
 
+  /**
+   * Whole-word `from -> to` replace: a pattern fires only when bounded by a non-word byte (or
+   * the stream edge) on both sides, so `head -> HEAD` rewrites `head` but not `header`/`ahead`.
+   * A distinct operation from [[literal]] (substring replace), so it always uses
+   * [[WordLiteralRewriter]] — there is no word-aware skip matcher to dispatch to.
+   */
+  def word(rules: Seq[(String, String)]): Rewriter = {
+    require(rules.nonEmpty, "at least one rule required")
+    new WordLiteralRewriter(rules)
+  }
+
+  /**
+   * Capture every URL starting with `anchor` and rewrite it via `template`, where `{url}` is the
+   * captured URL and `{enc}` its URL-encoded form — e.g. wrapping ad/measurement URLs behind a
+   * first-party endpoint. See [[TokenRewriter.wrappingUrls]].
+   */
+  def wrappingUrls(anchor: String, template: String): Rewriter =
+    TokenRewriter.wrappingUrls(anchor, template)
+
   /** True if no pattern is a substring of another (the condition under which Wu-Manber's
    *  selection is identical to Aho-Corasick's). */
   private[prism] def independent(ps: List[String]): Boolean =
