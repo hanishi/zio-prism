@@ -155,6 +155,7 @@ Runnable samples live in the `examples` module (kept out of the published jar):
 sbt "examples/runMain prism.SampleApp"                       # one-shot: a ~6.5 MB document
 sbt "examples/runMain prism.WordRewriteApp"                  # whole-word vs substring, over real prose
 sbt "examples/runMain prism.UrlWrapApp"                      # first-party URL wrapping in a VAST doc
+sbt "examples/runMain prism.HtmlTextApp"                     # text-only rewrite: skip tags/scripts/styles
 sbt "examples/runMain prism.StreamForeverApp"               # endless: a live, unbounded feed
 sbt "examples/runMain prism.StreamForeverApp /tmp/feed.out" # ...tee the rewritten bytes to a file
 ```
@@ -170,6 +171,11 @@ prints the contrast with `Rewrite.literal`: `art -> craft` rewrites the word "ar
 through `Rewrite.wrappingUrls` in deliberately tiny chunks, so every tracker URL straddles a
 chunk boundary, and shows each one captured whole and re-pointed at a first-party collector
 while a media URL on another host passes through untouched.
+
+`HtmlTextApp` shows context-aware rewriting via `RewriteStream.htmlText`: a streaming HTML
+tokenizer applies the inner rewriter to *visible text only*, so an aggressive whole-word rule
+rewrites the body text while `<head>`, `class="header"`, comments, and `<script>`/`<style>`
+bodies are left untouched — fed in 5-byte chunks to prove tags and text runs survive splitting.
 
 `StreamForeverApp` is the point of a streaming engine made visible: it rewrites the
 **Wikimedia EventStreams** feed (a public, never-ending Server-Sent Events stream of every

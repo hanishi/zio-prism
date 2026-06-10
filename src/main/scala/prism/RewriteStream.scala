@@ -33,6 +33,16 @@ object RewriteStream {
   def pipeline(rw: Rewriter): ZPipeline[Any, Nothing, Byte, Byte] =
     ZPipeline.fromChannel(loop(rw, Chunk.empty))
 
+  /**
+   * Lift a [[HtmlTextTokenizer]] (built from `inner`) into a `ZPipeline`, applying `inner` only to
+   * the text content of an HTML stream — tags, attributes, `<script>`/`<style>` bodies and
+   * comments pass through untouched. The tokenizer's per-stream [[HtmlState]] (parse mode + the
+   * raw-markup and inner-text carries) is threaded through the loop, so it survives chunk
+   * boundaries the same way the plain carry does.
+   */
+  def htmlText(inner: Rewriter): ZPipeline[Any, Nothing, Byte, Byte] =
+    ZPipeline.fromChannel(htmlLoop(new HtmlTextTokenizer(inner), HtmlState.initial))
+
   /** Emit `out`, skipping the write entirely when there is nothing to flush. */
   private def emit(out: Chunk[Byte]): Ch =
     if (out.isEmpty) ZChannel.unit else ZChannel.write(out)
@@ -46,5 +56,15 @@ object RewriteStream {
       },
       (err: Nothing) => ZChannel.fail(err), // input error type is Nothing: unreachable
       (_: Any) => emit(rw(carry, atEOF = true)._1)
+    )
+
+  private def htmlLoop(tok: HtmlTextTokenizer, state: HtmlState): Ch =
+    ZChannel.readWith(
+      (in: Chunk[Byte]) => {
+        val (out, next) = tok.process(state, in, atEOF = false)
+        emit(out) *> htmlLoop(tok, next)
+      },
+      (err: Nothing) => ZChannel.fail(err),
+      (_: Any) => emit(tok.process(state, Chunk.empty, atEOF = true)._1)
     )
 }
