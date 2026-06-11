@@ -89,6 +89,26 @@ object HtmlTextRewriteSpec extends ZIOSpecDefault {
       test("matches the one-shot result at every chunk boundary") {
         everySplitMatchesOneShot(doc)
       },
+      test("a tag name longer than 'script' is still markup, never text — at every split") {
+        val html = """<verylongcustomelement title="head">head</verylongcustomelement> head"""
+        for {
+          one <- oneShot(html)
+          ok  <- everySplitMatchesOneShot(html)
+        } yield ok &&
+          assertTrue(one == """<verylongcustomelement title="head">HEAD</verylongcustomelement> HEAD""")
+      },
+      test("markup carry stays bounded while a pathological endless tag name streams in") {
+        // `<` followed by letters forever. Before classification was possible without seeing the
+        // name's end, every chunk re-held the whole run and the carry grew without limit.
+        val tok    = new HtmlTextTokenizer(inner)
+        val letters = bytes("a" * 64)
+        val (_, maxCarry) = (1 to 64).foldLeft((tok.process(HtmlState.initial, bytes("<"), atEOF = false)._2, 0)) {
+          case ((st, mx), _) =>
+            val (_, next) = tok.process(st, letters, atEOF = false)
+            (next, math.max(mx, next.carry.length))
+        }
+        assertTrue(maxCarry <= 1 + "script".length)
+      },
       test("sanity: the visible text really was rewritten") {
         oneShot(doc).map(e =>
           assertTrue(

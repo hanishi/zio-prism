@@ -28,7 +28,10 @@ import java.util.Arrays
  * A streaming, single-pass tokenizer driven one chunk at a time. The parse mode and both carries
  * (the raw markup lookahead and the inner rewriter's text carry) live in an immutable
  * [[HtmlState]] threaded through the streaming channel — so they are per-stream and survive chunk
- * boundaries; the same patterns split across packets still match within a text run. Patterns do
+ * boundaries; the same patterns split across packets still match within a text run. Both carries
+ * are bounded: the markup lookahead holds at most a few ambiguous bytes (a possible `<!--` opener,
+ * or a tag-name prefix no longer than `script`), and the text carry is bounded by the inner
+ * rewriter's own contract — so memory stays constant even against adversarial markup. Patterns do
  * NOT match across a tag boundary (each text run is rewritten independently), which is the correct
  * HTML semantics — `inter<b>nal` is two text nodes.
  *
@@ -121,14 +124,19 @@ final class HtmlTextTokenizer(inner: Rewriter) {
               } else if (isLetter(c1)) {
                 var k = p + 1
                 while (k < n && isLetter(a(k))) k += 1
-                if (k >= n && !atEOF) hold = true
-                else {
+                if (k < n || atEOF) {
                   val name = new String(a, p + 1, k - (p + 1)).toLowerCase
                   val raw  = if (name == "script") ScriptClose
                              else if (name == "style") StyleClose
                              else NoRaw
                   beginTag(closing = false, raw = raw)
-                }
+                } else if (k - (p + 1) > MaxRawNameLen) {
+                  // Name still running at the buffer edge, but already longer than "script" —
+                  // the only names that matter for classification — so it can be treated as an
+                  // ordinary tag without seeing its end. This caps the carry: an adversarial
+                  // `<` + endless-letters stream never accumulates.
+                  beginTag(closing = false, raw = NoRaw)
+                } else hold = true
               } else {
                 feedText(p, p + 1); p += 1 // '<' is literal text
               }
@@ -205,6 +213,10 @@ object HtmlTextTokenizer {
   private val ScriptClose = "</script".getBytes("US-ASCII")
   private val StyleClose  = "</style".getBytes("US-ASCII")
   private val NoRaw       = Array.emptyByteArray
+
+  /** Longest raw-text element name ("script"): a tag-name lookahead past this length can be
+    * classified without seeing where the name ends, which is what bounds the markup carry. */
+  private val MaxRawNameLen = "script".length
 
   private def isLetter(b: Byte): Boolean = {
     val u = b & 0xff; (u >= 'a' && u <= 'z') || (u >= 'A' && u <= 'Z')
