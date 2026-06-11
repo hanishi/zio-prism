@@ -53,7 +53,7 @@ object HtmlTextApp extends ZIOAppDefault {
   /** Stream `s` one tiny `n`-byte chunk at a time, splitting mid-tag and mid-word on purpose. */
   private def chunked(s: String, n: Int): ZStream[Any, Nothing, Byte] = {
     val b = Chunk.fromArray(s.getBytes(UTF_8))
-    ZStream.fromChunks((0 until b.length by n).map(i => b.slice(i, math.min(i + n, b.length)))*)
+    ZStream.fromChunks((b.indices by n).map(i => b.slice(i, math.min(i + n, b.length)))*)
   }
 
   def run =
