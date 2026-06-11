@@ -21,15 +21,22 @@ package prism
  *   - one pattern                          -> Boyer-Moore-Horspool
  *   - several independent patterns (>= 2 bytes, none a substring of another) -> Wu-Manber
  *   - anything else                        -> Aho-Corasick (the correctness floor)
+ *
+ * Rules sharing the same `from` are deduplicated first (the first rule wins), so the choice
+ * of matcher never changes which replacement fires.
  */
 object Rewrite {
 
   def literal(rules: Seq[(String, String)]): Rewriter = {
     require(rules.nonEmpty, "at least one rule required")
-    val froms = rules.map(_._1).toList
-    if (rules.sizeIs == 1) BmhRewriter(rules.head._1, rules.head._2)
-    else if (froms.forall(_.length >= 2) && independent(froms)) new WuManberRewriter(rules)
-    else new LiteralRewriter(rules)
+    // Duplicate `from`s: keep the first rule. Aho-Corasick's trie naturally keeps the first,
+    // but Wu-Manber builds its candidate lists by prepending, so the last would win there —
+    // deduping up front keeps the dispatch below a pure speed choice, never a semantic one.
+    val deduped = rules.distinctBy(_._1)
+    val froms   = deduped.map(_._1).toList
+    if (deduped.sizeIs == 1) BmhRewriter(deduped.head._1, deduped.head._2)
+    else if (froms.forall(_.length >= 2) && independent(froms)) new WuManberRewriter(deduped)
+    else new LiteralRewriter(deduped)
   }
 
   /**

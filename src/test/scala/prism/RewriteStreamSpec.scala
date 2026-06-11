@@ -55,6 +55,15 @@ object RewriteStreamSpec extends ZIOSpecDefault {
       run(Seq("a internal.example.com b tracker.example.com c"), rw)
         .map(r => assertTrue(r == "a X b Y c"))
     },
+    test("dispatch: duplicate `from` rules — first rule wins, agreeing with Aho-Corasick") {
+      // Without dedup these route to Wu-Manber, whose prepended candidate lists would pick
+      // the LAST duplicate ("2") while Aho-Corasick picks the first ("1").
+      val rules = Seq("ab" -> "1", "ab" -> "2")
+      for {
+        got <- run(Seq("xxabyy"), Rewrite.literal(rules))
+        ref <- run(Seq("xxabyy"), new LiteralRewriter(rules))
+      } yield assertTrue(got == "xx1yy", got == ref)
+    },
     test("non-ASCII (UTF-8) patterns, split mid-character") {
       val rw = BmhRewriter("アパッチ", "APACHE")
       run(Seq("x アパッ", "チ y アパッチ"), rw).map(r => assertTrue(r == "x APACHE y APACHE"))

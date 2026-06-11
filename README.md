@@ -110,6 +110,9 @@ Byte]`. The matcher is chosen per ruleset by `Rewrite.literal`:
 - several independent patterns (>= 2 bytes, none a substring of another) -> Wu-Manber
 - otherwise -> Aho-Corasick (one O(n) pass, the correctness floor)
 
+Rules sharing the same `from` are deduplicated before dispatch (the first rule wins), so the
+choice of matcher never changes which replacement fires.
+
 Output is identical across all three, verified at every chunk boundary including
 mid-character splits in UTF-8; the skip matchers are chosen only when their selection
 provably matches Aho-Corasick's. Because the engine is `Chunk[Byte]`-native, there is no
@@ -191,13 +194,13 @@ example pulled from each window so you can watch the rewrite happen:
 
 ```
 0.14 MB rewritten   live heap 52 MB
-    e.g.  es.wikipedia.org  ->  es.wikipedia.mirror
+    e.g.  es.wikipedia.org  ->  es.ziopedia.org
 0.53 MB rewritten   live heap 52 MB
-    e.g.  en.wikinews.org  ->  en.wikinews.mirror
+    e.g.  en.wikinews.org  ->  en.zionews.org
 1.08 MB rewritten   live heap 52 MB
-    e.g.  en.wikipedia.org  ->  en.wikipedia.mirror
+    e.g.  en.wikipedia.org  ->  en.ziopedia.org
 1.38 MB rewritten   live heap 52 MB
-    e.g.  ur.wikipedia.org  ->  ur.wikipedia.mirror
+    e.g.  ur.wikipedia.org  ->  ur.ziopedia.org
 ```
 
 As it streams, every rewritten byte is also tee'd to a file (`rewritten.out` by default, or a

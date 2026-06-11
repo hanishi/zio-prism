@@ -101,7 +101,7 @@ object StreamForeverApp extends ZIOAppDefault {
   private def isHostChar(c: Char): Boolean = c.isLetterOrDigit || c == '.' || c == '-'
 
   /** Pull one rewritten host out of a window of output bytes and show it next to its original,
-    * e.g. `en.wikipedia.org  ->  en.wikipedia.mirror`. */
+    * e.g. `en.wikipedia.org  ->  en.ziopedia.org`. */
   private def sampleRewrite(window: Chunk[Byte]): Option[String] = {
     val text = new String(window.toArray, UTF_8)
     val idx  = text.indexOf(".org")

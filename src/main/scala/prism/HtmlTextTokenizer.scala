@@ -34,8 +34,13 @@ import java.util.Arrays
  *
  * Scope: it understands tags (with quoted attribute values that may contain `>`),
  * `<!-- comments -->`, and `<script>`/`<style>` raw-text elements (closed by `</script` /
- * `</style`). It does not special-case CDATA, processing instructions, or SVG/MathML foreign
- * content; those are emitted verbatim, which is safe (it just means no rewriting inside them).
+ * `</style`). Other constructs get browser-style fallbacks rather than their own states:
+ * `<!…>` (doctype, CDATA) is consumed as markup up to the first unquoted `>` — so a
+ * `<![CDATA[…]]>` whose payload contains a `>` has the rest of that payload treated as
+ * rewritable text, the same place an HTML parser's "bogus comment" would end — and a `<` not
+ * followed by a letter, `!` or `/` (e.g. `<?`) is literal text, fed to the inner rewriter.
+ * SVG/MathML foreign content is tokenized by the ordinary HTML rules. For XML documents
+ * (VAST, RSS), apply the inner rewriter directly instead of fronting it with this tokenizer.
  *
  * Output is built by concatenating a handful of `Chunk[Byte]` segments per chunk (verbatim markup
  * slices and inner-rewriter outputs), not by per-byte appends — so there is no boxing in the hot
