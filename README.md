@@ -160,6 +160,7 @@ sbt "examples/runMain prism.WordRewriteApp"                  # whole-word vs sub
 sbt "examples/runMain prism.UrlWrapApp"                      # first-party URL wrapping in a VAST doc
 sbt "examples/runMain prism.HtmlTextApp"                     # text-only rewrite: skip tags/scripts/styles
 sbt "examples/runMain prism.HostRewriteApp"                  # rewrite a host in href/src values only
+sbt "examples/runMain prism.HlsManifestApp"                  # re-point + token-sign URLs in an HLS playlist
 sbt "examples/runMain prism.StreamForeverApp"               # endless: a live, unbounded feed
 sbt "examples/runMain prism.StreamForeverApp /tmp/feed.out" # ...tee the rewritten bytes to a file
 ```
@@ -185,6 +186,15 @@ bodies are left untouched — fed in 5-byte chunks to prove tags and text runs s
 `href`/`src` attribute values* (decoding `&amp;` so the host still matches in a query string),
 contrasted with a plain `Rewrite.literal` swap that rewrites the host everywhere — in prose and
 inside `<script>` — to show why attribute-scoped rewriting is the right tool for a proxy.
+
+`HlsManifestApp` applies the two rewrites a video proxy actually performs on an HLS `.m3u8`:
+`Rewrite.literal` re-points the CDN host (a manifest has no prose, so the host appears only in
+URLs and needs no attribute-scoping), then `Rewrite.wrappingUrls` signs every URL on the new host
+with an expiring token. One signer covers both the bare-line `#EXTINF` segments and the
+tag-embedded `URI="…"` values (the `#EXT-X-MAP` init segment and `#EXT-X-KEY` decryption key),
+because its URL boundary ends a token at a newline *or* a quote — while durations, sequence
+numbers, and the key `IV` are left untouched. Fed in 7-byte chunks to prove every URL is
+re-pointed and signed whole across boundaries.
 
 `StreamForeverApp` is the point of a streaming engine made visible: it rewrites the
 **Wikimedia EventStreams** feed (a public, never-ending Server-Sent Events stream of every
