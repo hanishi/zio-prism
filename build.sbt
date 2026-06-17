@@ -1,7 +1,21 @@
-ThisBuild / scalaVersion := "3.3.4"
-ThisBuild / organization := "llc.programmer"
-ThisBuild / version      := "0.1.0-SNAPSHOT"
-ThisBuild / licenses     := Seq("Apache-2.0" -> url("https://www.apache.org/licenses/LICENSE-2.0"))
+ThisBuild / scalaVersion     := "3.3.4"
+ThisBuild / organization     := "io.github.hanishi" // groupId; GitHub-account-verified namespace (no domain)
+ThisBuild / organizationName := "Programmer LLC"
+ThisBuild / versionScheme    := Some("early-semver")
+ThisBuild / licenses         := Seq("Apache-2.0" -> url("https://www.apache.org/licenses/LICENSE-2.0"))
+ThisBuild / description :=
+  "Streaming, chunk-boundary-aware content rewriting for ZIO Streams — Chunk[Byte]-native."
+ThisBuild / homepage := Some(url("https://github.com/hanishi/zio-prism"))
+ThisBuild / scmInfo := Some(
+  ScmInfo(url("https://github.com/hanishi/zio-prism"), "scm:git:https://github.com/hanishi/zio-prism.git")
+)
+ThisBuild / developers := List(
+  Developer("hanishi", "Haruhiko Nishi", "haruhiko.nishi@programmer.llc", url("https://github.com/hanishi"))
+)
+// sbt-ci-release (1.9+) publishes to the Sonatype Central Portal (https://central.sonatype.com) by
+// default. The version is derived from git tags by sbt-dynver: a `vX.Y.Z` tag publishes that
+// release, any other commit publishes a `-SNAPSHOT`. That's why no `version` is set here — don't
+// add one back.
 
 val zioVersion = "2.1.26"
 

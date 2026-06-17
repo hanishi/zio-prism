@@ -10,6 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # tags available so sbt-dynver derives a clean version (no dirty warnings)
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

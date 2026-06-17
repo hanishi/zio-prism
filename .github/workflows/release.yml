@@ -1,0 +1,29 @@
+name: Release
+
+# Publishes to the Sonatype Central Portal when a version tag is pushed (e.g. `git tag v0.1.0 &&
+# git push origin v0.1.0`). sbt-dynver reads the tag to set the release version; sbt-ci-release
+# signs and publishes. Requires the four repository secrets listed below.
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history + tags so sbt-dynver computes the release version
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: sbt
+      - uses: sbt/setup-sbt@v1
+      - name: Publish to Central
+        run: sbt ci-release
+        env:
+          PGP_PASSPHRASE: ${{ secrets.PGP_PASSPHRASE }}
+          PGP_SECRET: ${{ secrets.PGP_SECRET }}
+          SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
+          SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
