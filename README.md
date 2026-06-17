@@ -1,6 +1,6 @@
 # zio-prism
 
-[![Maven Central](https://img.shields.io/maven-metadata/v?metadataUrl=https%3A%2F%2Frepo1.maven.org%2Fmaven2%2Fio%2Fgithub%2Fhanishi%2Fzio-prism_3%2Fmaven-metadata.xml&label=maven%20central)](https://central.sonatype.com/artifact/io.github.hanishi/zio-prism_3)
+[![Maven Central](https://img.shields.io/badge/maven_central-0.1.0-blue)](https://central.sonatype.com/artifact/io.github.hanishi/zio-prism_3)
 [![CI](https://github.com/hanishi/zio-prism/actions/workflows/ci.yml/badge.svg)](https://github.com/hanishi/zio-prism/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 
