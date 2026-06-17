@@ -1,8 +1,14 @@
 # zio-prism
 
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.hanishi/zio-prism_3)](https://central.sonatype.com/artifact/io.github.hanishi/zio-prism_3)
+
 **PRISM**: *PRoxy Integrated Service Module*. Streaming, chunk-boundary-aware content
 rewriting for **ZIO Streams**, `Chunk[Byte]`-native end to end. Like a prism refracts a
 beam, it splits and transforms a byte stream as it passes through.
+
+```scala
+libraryDependencies += "io.github.hanishi" %% "zio-prism" % "0.1.0"
+```
 
 ```scala
 import prism.{Rewrite, RewriteStream}
