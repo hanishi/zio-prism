@@ -64,6 +64,7 @@ final class HtmlTextTokenizer(inner: Rewriter) {
 
     var out          = Chunk.empty[Byte]
     var textCarry    = state.textCarry
+    var textPrev     = state.textPrev
     var mode         = state.mode
     var quote        = state.quote
     var lastNonSpace = state.lastNonSpace
@@ -80,17 +81,20 @@ final class HtmlTextTokenizer(inner: Rewriter) {
     // Stream text bytes through the inner rewriter (carry kept in textCarry).
     def feedText(from: Int, until: Int): Unit = {
       textCarry = textCarry ++ slice(from, until)
-      val (o, consumed) = inner(textCarry, atEOF = false)
+      val (o, consumed) = inner(textCarry, atEOF = false, textPrev)
+      if (consumed > 0) textPrev = textCarry(consumed - 1) & 0xff
       textCarry = textCarry.drop(consumed)
       append(o)
     }
     // End the current text run: flush the inner rewriter's remaining carry.
-    def flushText(): Unit =
+    def flushText(): Unit = {
       if (textCarry.nonEmpty) {
-        val (o, _) = inner(textCarry, atEOF = true)
+        val (o, _) = inner(textCarry, atEOF = true, textPrev)
         textCarry = Chunk.empty
         append(o)
       }
+      textPrev = -1 // the next text run is a fresh text node
+    }
     // Enter TAG mode at the current '<'. We do NOT emit or advance: the TAG branch emits
     // verbatim starting from the '<' itself.
     def beginTag(closing: Boolean, raw: Array[Byte]): Unit = {
@@ -197,7 +201,7 @@ final class HtmlTextTokenizer(inner: Rewriter) {
     }
 
     val next = HtmlState(
-      newCarry, textCarry, mode, quote, lastNonSpace, isClosing, pendingRaw, rawClose, rawMatch, dashCount
+      newCarry, textCarry, textPrev, mode, quote, lastNonSpace, isClosing, pendingRaw, rawClose, rawMatch, dashCount
     )
     (out, next)
   }
@@ -231,12 +235,14 @@ object HtmlTextTokenizer {
 /**
  * The per-stream parse state for [[HtmlTextTokenizer]], threaded immutably through the streaming
  * channel. `carry` is the raw markup lookahead (an ambiguous `<…` at a chunk edge); `textCarry`
- * is the inner rewriter's carry for the current text run. Both keep the tokenizer correct across
- * chunk boundaries.
+ * is the inner rewriter's carry for the current text run, and `textPrev` the byte preceding it
+ * (`-1` at the start of a run, since a text node's first byte has no left context). All three keep
+ * the tokenizer correct across chunk boundaries.
  */
 final case class HtmlState(
     carry: Chunk[Byte],
     textCarry: Chunk[Byte],
+    textPrev: Int,
     mode: Int,
     quote: Int,
     lastNonSpace: Int,
@@ -250,7 +256,7 @@ final case class HtmlState(
 object HtmlState {
   val initial: HtmlState =
     HtmlState(
-      Chunk.empty, Chunk.empty,
+      Chunk.empty, Chunk.empty, -1,
       HtmlTextTokenizer.TEXT, 0, 0, false,
       Array.emptyByteArray, Array.emptyByteArray, 0, 0
     )

@@ -44,6 +44,14 @@ import java.util.Arrays
  */
 trait Rewriter {
   def apply(input: Chunk[Byte], atEOF: Boolean): (Chunk[Byte], Int)
+
+  /**
+   * As [[apply]], but told the byte immediately preceding `input` in the original stream
+   * (`prev < 0` at the true stream start). Rewriters whose match decision depends on left
+   * context (whole-word, attribute-name boundaries) override this; the rest ignore it.
+   */
+  def apply(input: Chunk[Byte], atEOF: Boolean, prev: Int): (Chunk[Byte], Int) =
+    apply(input, atEOF)
 }
 
 /**
