@@ -35,7 +35,9 @@ import java.util.Arrays
  * Streaming correctness: deciding the RIGHT boundary needs one byte past the match, and deciding
  * the LEFT boundary of a match that lands at the very start of the next chunk needs one byte of
  * left context — so the carry retains up to one byte before the held region. Carry stays bounded
- * by `maxPatternLength + 1`. Output is assembled into a raw byte buffer via `System.arraycopy`
+ * by `maxPatternLength + 1`. When a replacement ends exactly where the next match begins there is
+ * no room left to retain, so the envelope supplies that byte instead via the `prev` overload of
+ * [[Rewriter.apply]]; without it the left boundary would silently depend on the chunk split. Output is assembled into a raw byte buffer via `System.arraycopy`
  * (never a boxing `Chunk` builder); the unmatched path returns a zero-copy `input.take` slice.
  */
 final class WordLiteralRewriter(
@@ -50,14 +52,16 @@ final class WordLiteralRewriter(
   private val ac         = AhoCorasick(patterns.map(identity))
   private val maxReplLen = repls.map(_.length).max
 
-  private def isWordByte(b: Byte): Boolean = {
-    val u = b & 0xff
+  private def isWordCode(u: Int): Boolean =
     (u >= 'a' && u <= 'z') || (u >= 'A' && u <= 'Z') ||
     (u >= '0' && u <= '9') || u == '_' || u >= 0x80
-  }
+
+  private def isWordByte(b: Byte): Boolean = isWordCode(b & 0xff)
   private def isBoundary(b: Byte): Boolean = !isWordByte(b)
 
-  def apply(input: Chunk[Byte], atEOF: Boolean): (Chunk[Byte], Int) = {
+  def apply(input: Chunk[Byte], atEOF: Boolean): (Chunk[Byte], Int) = apply(input, atEOF, -1)
+
+  override def apply(input: Chunk[Byte], atEOF: Boolean, prev: Int): (Chunk[Byte], Int) = {
     if (input.isEmpty) return (Chunk.empty, 0)
 
     val bytes = input.toArray
@@ -103,9 +107,12 @@ final class WordLiteralRewriter(
       if (mlen > 0) {
         val start = i - mlen + 1
         if (start >= lastEmit) {
-          // Left boundary: stream start counts as a boundary; otherwise look at the preceding
-          // byte (always present — we retain one byte of context).
-          val leftOK = start == 0 || isBoundary(bytes(start - 1))
+          // Left boundary: the preceding byte, or — for a match at index 0, where the carry
+          // could not keep left context because a replacement ended right there — the `prev`
+          // the envelope carried over. `prev < 0` means this really is the start of the stream.
+          val leftOK =
+            if (start > 0) isBoundary(bytes(start - 1))
+            else prev < 0 || !isWordCode(prev)
           if (leftOK) {
             if (i + 1 < len) {
               if (isBoundary(bytes(i + 1))) replaceAt(start, i + 1)

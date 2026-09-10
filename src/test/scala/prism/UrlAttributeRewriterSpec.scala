@@ -72,6 +72,16 @@ object UrlAttributeRewriterSpec extends ZIOSpecDefault {
       test("transforms a value whose closing quote arrives in a later chunk") {
         stream(rw, Seq(bytes("""<a href="http://int"""), bytes("""ernal/x">end""")))
           .map(got => assertTrue(got == """<a href="HTTP://INTERNAL/X">end"""))
+      },
+      // The name boundary must not depend on where the chunks fall: an anchor landing at index 0
+      // of a mid-stream buffer has its preceding byte carried over by the envelope, not assumed to
+      // be a boundary — otherwise `data-href` is rewritten whenever a chunk begins at `href`.
+      test("respects the name boundary when the anchor starts a later chunk") {
+        for {
+          prefixed <- everySplitMatchesOneShot(rw, """<x data-href="http://internal/a">""")
+          bare     <- everySplitMatchesOneShot(rw, "zzzzxhref=http://internal/a ")
+          split    <- stream(rw, Seq(bytes("<x data-"), bytes("""href="http://internal/a">""")))
+        } yield assertTrue(split == """<x data-href="http://internal/a">""") && prefixed && bare
       }
     ),
     suite("case-insensitive anchors")(

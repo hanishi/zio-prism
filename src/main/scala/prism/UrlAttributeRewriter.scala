@@ -26,8 +26,10 @@ import java.util.Arrays
  * preserved byte-for-byte. Handles double-quoted, single-quoted, and unquoted values, and
  * tolerates whitespace around `=`.
  *
- * Streaming contract: when a value is not yet fully present (no closing quote / delimiter in the
- * buffer) and we are not at EOF and still under budget, the anchor and everything after it are
+ * Streaming contract: the anchor's name boundary is judged against the preceding byte, which the
+ * envelope carries across chunks (the `prev` overload of [[Rewriter.apply]]), so `data-href` stays
+ * unmatched however the stream is framed. When a value is not yet fully present (no closing quote
+ * / delimiter in the buffer) and we are not at EOF and still under budget, the anchor and everything after it are
  * left unconsumed (carry), to be retried when more bytes arrive. Carry is bounded by
  * [[maxValueLength]]. On EOF or budget overflow it emits the anchor verbatim instead of
  * translating a truncated value (no corruption).
@@ -67,7 +69,9 @@ final class UrlAttributeRewriter(
 
   import UrlAttributeRewriter.*
 
-  def apply(input: Chunk[Byte], atEOF: Boolean): (Chunk[Byte], Int) = {
+  def apply(input: Chunk[Byte], atEOF: Boolean): (Chunk[Byte], Int) = apply(input, atEOF, -1)
+
+  override def apply(input: Chunk[Byte], atEOF: Boolean, prev: Int): (Chunk[Byte], Int) = {
     if (input.isEmpty) return (Chunk.empty, 0)
 
     val bytes = input.toArray
@@ -101,7 +105,7 @@ final class UrlAttributeRewriter(
       val mlen = ac.matchLenAt(state)
       if (mlen > 0) {
         val anchorStart = i - mlen + 1
-        if (anchorStart >= lastEmit && wordBoundaryOk(bytes, anchorStart)) {
+        if (anchorStart >= lastEmit && wordBoundaryOk(bytes, anchorStart, prev)) {
           parseValue(bytes, i + 1, anchorStart, len, atEOF, maxValueLength) match {
             case Parse.Complete(valueStart, valueEnd) =>
               if (valueStart > lastEmit) append(bytes, lastEmit, valueStart - lastEmit) // anchor, =, quote: verbatim
@@ -167,10 +171,14 @@ object UrlAttributeRewriter {
     b == ' ' || b == '\t' || b == '\n' || b == '\r' || b == '\f'
 
   /** An anchor must start at a name boundary, so `data-href` / `xhref` don't match. */
-  private def wordBoundaryOk(bytes: Array[Byte], anchorStart: Int): Boolean = {
-    if (anchorStart == 0) return true // boundary lived in an already-emitted chunk
-    val prev = bytes(anchorStart - 1)
-    isSpace(prev) || prev == '<' || prev == '/' || prev == '"' || prev == '\''
+  private def wordBoundaryOk(bytes: Array[Byte], anchorStart: Int, prev: Int): Boolean = {
+    // At index 0 the preceding byte is not in this buffer; the envelope carries it over as `prev`
+    // (`prev < 0` only at the true start of the stream, which is a boundary). Assuming a boundary
+    // here instead would make `data-href` rewritable whenever a chunk happened to begin at `href`.
+    val u = if (anchorStart > 0) bytes(anchorStart - 1) & 0xff else prev
+    if (u < 0) return true
+    val prevByte = u.toByte
+    isSpace(prevByte) || prevByte == '<' || prevByte == '/' || prevByte == '"' || prevByte == '\''
   }
 
   /**

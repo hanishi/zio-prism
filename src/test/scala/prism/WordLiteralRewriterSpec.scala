@@ -71,6 +71,16 @@ object WordLiteralRewriterSpec extends ZIOSpecDefault {
       test("decides the left boundary when a match starts a later chunk") {
         stream(rw, Seq(bytes("go a"), bytes("head now")))
           .map(got => assertTrue(got == "go ahead now"))
+      },
+      // A pattern whose first byte is a boundary can begin exactly where the previous replacement
+      // ended, leaving no room in the carry for a byte of left context. The envelope carries that
+      // byte over instead; without it "-x" would look like it started the stream.
+      test("keeps the left boundary of a pattern that begins right after a replacement") {
+        val punct = new WordLiteralRewriter(Seq("head" -> "HEAD", "-x" -> "MX"))
+        for {
+          exact <- everySplitMatchesOneShot(punct, "head-x")
+          mixed <- everySplitMatchesOneShot(punct, "-x head-x head -x")
+        } yield assertTrue(oneShot(punct, "head-x") == "HEAD-x") && exact && mixed
       }
     )
   )

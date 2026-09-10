@@ -14,6 +14,7 @@
 
 package prism
 
+import zio.ZIO
 import zio.test.*
 
 import RewriteTestKit.*
@@ -24,10 +25,15 @@ import RewriteTestKit.*
  * checked at *every* chunk size 1..N, so the boundary dimension stays exhaustive while the
  * (ruleset x body) dimension is now generated rather than sampled by example.
  *
- * The three properties pin the three correctness seams the design rests on:
+ * The first three properties pin the three correctness seams the matcher dispatch rests on:
  *   - `Rewrite.literal` (the public dispatcher) == Aho-Corasick, for random independent rulesets
  *   - `WuManberRewriter` == Aho-Corasick, directly, for random independent rulesets
  *   - `BmhRewriter`     == Aho-Corasick, directly, for a random single pattern
+ *
+ * The last two pin the seam the *context-sensitive* rewriters rest on — that a match decision
+ * which reads the byte before the match is still independent of where the chunks fall. Both had
+ * fixed specs that passed while the fuzzed cases did not: the fixtures happened to avoid patterns
+ * beginning on a boundary byte, and anchors landing at the very start of a mid-stream buffer.
  *
  * The alphabet mixes single-byte ASCII with a 3-byte UTF-8 char ('あ'), so generated bodies
  * routinely split mid-character — the same hazard the fixed specs cover, now fuzzed.
@@ -68,6 +74,31 @@ object RewritePropertySpec extends ZIOSpecDefault {
   private val genIndependentCase: Gen[Any, (Seq[(String, String)], String)] =
     genIndependentRules.flatMap(rules => genBody(rules).map(rules -> _))
 
+  /** Alphabet for the whole-word property: word bytes and boundary bytes, so generated patterns
+    * routinely *begin* on a boundary byte — the case where a replacement can end exactly where the
+    * next match starts, leaving the carry no room for a byte of left context. */
+  private val wordAlphabet: Seq[Char] = Seq('a', 'b', '-', '.', ' ')
+
+  private def genWordStr(min: Int, max: Int): Gen[Any, String] =
+    Gen.int(min, max).flatMap(n => Gen.listOfN(n)(Gen.elements(wordAlphabet*)).map(_.mkString))
+
+  private val genWordCase: Gen[Any, (Seq[(String, String)], String)] =
+    for {
+      ps   <- Gen.int(1, 3).flatMap(k => Gen.listOfN(k)(genWordStr(1, 3)))
+      body <- genWordStr(1, 10)
+    } yield withRepls(ps.distinct.filter(_.nonEmpty)) -> body
+
+  /** Attribute-ish fragments, mixed so anchors land at every offset — notably at index 0 of a
+    * mid-stream buffer, and preceded by a name byte (`data-href`, `xhref`), where the byte that
+    * decides the name boundary is no longer in the buffer. */
+  private val genAttrDoc: Gen[Any, String] = {
+    val frag = Gen.elements(
+      "<a href=\"u/p\">", "<x data-href=\"u/p\">", "xhref=u ", "<img src='u/p'/>",
+      "href", "src", "u", " ", "=", "\"", ">", "<a ", "data-"
+    )
+    Gen.int(1, 6).flatMap(n => Gen.listOfN(n)(frag).map(_.mkString))
+  }
+
   private val genBmhCase: Gen[Any, (String, String, String)] =
     for {
       pat  <- genStr(1, 6)
@@ -89,6 +120,17 @@ object RewritePropertySpec extends ZIOSpecDefault {
     test("BmhRewriter agrees with Aho-Corasick at every split (single pattern)") {
       check(genBmhCase) { case (pat, repl, body) =>
         everySplitAgrees(BmhRewriter(pat, repl), new LiteralRewriter(Seq(pat -> repl)), body)
+      }
+    },
+    test("Rewrite.word matches its one-shot result at every split") {
+      check(genWordCase) { case (rules, body) =>
+        if (rules.isEmpty) ZIO.succeed(assertCompletes)
+        else everySplitMatchesOneShot(Rewrite.word(rules), body)
+      }
+    },
+    test("Rewrite.replacingHost matches its one-shot result at every split") {
+      check(genAttrDoc) { doc =>
+        everySplitMatchesOneShot(Rewrite.replacingHost("u", "U"), doc)
       }
     }
   ) @@ TestAspect.samples(100)

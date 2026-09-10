@@ -22,7 +22,9 @@ import zio.stream.{ZChannel, ZPipeline}
  *
  * The carry contract is the one from pekko-prism's `RewriteStage`: accumulate
  * `carry ++ chunk`, run the rewriter, emit the finalized output, keep the unconsumed
- * tail, and flush with `atEOF = true` when the stream ends. Because the engine is already
+ * tail, and flush with `atEOF = true` when the stream ends. The last byte finalized is carried
+ * over as `prev`, so left-context-sensitive rewriters can judge a boundary that fell in an
+ * already-emitted chunk. Because the engine is already
  * `Chunk[Byte]`-native, there is no byte-container conversion here at all.
  */
 object RewriteStream {
@@ -31,7 +33,7 @@ object RewriteStream {
   private type Ch = ZChannel[Any, Nothing, Chunk[Byte], Any, Nothing, Chunk[Byte], Unit]
 
   def pipeline(rw: Rewriter): ZPipeline[Any, Nothing, Byte, Byte] =
-    ZPipeline.fromChannel(loop(rw, Chunk.empty))
+    ZPipeline.fromChannel(loop(rw, Chunk.empty, -1))
 
   /**
    * Lift a [[HtmlTextTokenizer]] (built from `inner`) into a `ZPipeline`, applying `inner` only to
@@ -47,15 +49,17 @@ object RewriteStream {
   private def emit(out: Chunk[Byte]): Ch =
     if (out.isEmpty) ZChannel.unit else ZChannel.write(out)
 
-  private def loop(rw: Rewriter, carry: Chunk[Byte]): Ch =
+  private def loop(rw: Rewriter, carry: Chunk[Byte], prev: Int): Ch =
     ZChannel.readWith(
       (in: Chunk[Byte]) => {
         val buf             = carry ++ in
-        val (out, consumed) = rw(buf, atEOF = false)
-        emit(out) *> loop(rw, buf.drop(consumed))
+        val (out, consumed) = rw(buf, atEOF = false, prev)
+        // The true left neighbour of the new carry: the last byte this call finalized.
+        val nextPrev = if (consumed > 0) buf(consumed - 1) & 0xff else prev
+        emit(out) *> loop(rw, buf.drop(consumed), nextPrev)
       },
       (err: Nothing) => ZChannel.fail(err), // input error type is Nothing: unreachable
-      (_: Any) => emit(rw(carry, atEOF = true)._1)
+      (_: Any) => emit(rw(carry, atEOF = true, prev)._1)
     )
 
   private def htmlLoop(tok: HtmlTextTokenizer, state: HtmlState): Ch =
